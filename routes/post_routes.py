@@ -16,7 +16,7 @@ from models.schemas import (
     PostCreate,
     PostResponse,
     PostUpdate,
-    UserResponse,
+    UserPublicResponse,
 )
 
 router = APIRouter(prefix="/posts", tags=["Posts"])
@@ -130,7 +130,7 @@ def unlike_post(
     )
 
 
-@router.get("/{post_id}/likes", response_model=list[UserResponse])
+@router.get("/{post_id}/likes", response_model=list[UserPublicResponse])
 def read_post_likes(
     post_id: int = Path(..., ge=1),
     skip: int = Query(default=0, ge=0),

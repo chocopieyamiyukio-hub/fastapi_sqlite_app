@@ -45,16 +45,21 @@ class ItemResponse(ItemBase):
     model_config = ConfigDict(from_attributes=True, extra="ignore")
 
 
-class UserBase(BaseModel):
-    """Shared fields and validation rules for social media User schemas."""
+class UserPublicBase(BaseModel):
+    """Publicly visible fields and validation rules for social media User schemas."""
 
     username: str = Field(..., min_length=1, max_length=50)
-    email: EmailStr = Field(..., max_length=100)
     display_name: str | None = Field(default=None, max_length=80)
     bio: str | None = Field(default=None, max_length=300)
     is_active: bool = True
 
     model_config = ConfigDict(str_strip_whitespace=True, extra="forbid")
+
+
+class UserBase(UserPublicBase):
+    """Shared fields including private email for account input schemas."""
+
+    email: EmailStr = Field(..., max_length=100)
 
 
 class UserRegister(UserBase):
@@ -84,8 +89,8 @@ class UserUpdate(BaseModel):
         return value
 
 
-class UserResponse(UserBase):
-    """Schema returned in API responses for a user."""
+class UserPublicResponse(UserPublicBase):
+    """Public schema returned in API responses (excludes email)."""
 
     id: int
     created_at: datetime
@@ -93,8 +98,24 @@ class UserResponse(UserBase):
     model_config = ConfigDict(from_attributes=True, extra="ignore")
 
 
-class UserProfileResponse(UserResponse):
-    """User profile schema including social activity counts."""
+class UserPrivateResponse(UserPublicResponse):
+    """Private schema returned only to the account owner (includes email)."""
+
+    email: EmailStr
+
+    model_config = ConfigDict(from_attributes=True, extra="ignore")
+
+
+class UserProfileResponse(UserPublicResponse):
+    """Public user profile schema including social activity counts."""
+
+    posts_count: int = 0
+    followers_count: int = 0
+    following_count: int = 0
+
+
+class UserProfilePrivateResponse(UserPrivateResponse):
+    """Private user profile schema for /users/me including email and counts."""
 
     posts_count: int = 0
     followers_count: int = 0

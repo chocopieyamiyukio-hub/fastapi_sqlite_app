@@ -1,3 +1,5 @@
+from typing import TypeVar
+
 from fastapi import HTTPException, status
 from sqlalchemy import delete, func, select
 from sqlalchemy.exc import IntegrityError
@@ -8,9 +10,12 @@ from models.db_models import Follow, Post, User
 from models.schemas import (
     FollowResponse,
     UserBase,
+    UserProfilePrivateResponse,
     UserProfileResponse,
     UserUpdate,
 )
+
+_ProfileT = TypeVar("_ProfileT", UserProfileResponse, UserProfilePrivateResponse)
 
 
 def get_users(db: Session, skip: int = 0, limit: int = 100) -> list[User]:
@@ -36,8 +41,14 @@ def _count_followers(db: Session, user_id: int) -> int:
     return int(db.scalar(stmt) or 0)
 
 
-def get_user_profile(db: Session, user_id: int) -> UserProfileResponse:
-    """Retrieve a user's profile with posts, followers, and following counts."""
+def _to_profile_response(
+    db: Session,
+    user_id: int,
+    schema_cls: type[_ProfileT],
+    *,
+    include_email: bool = False,
+) -> _ProfileT:
+    """Build a public or private user profile response with activity counts."""
     user = get_user_by_id(db, user_id)
     posts_count = int(
         db.scalar(select(func.count(Post.id)).where(Post.author_id == user_id)) or 0
@@ -47,17 +58,31 @@ def get_user_profile(db: Session, user_id: int) -> UserProfileResponse:
         db.scalar(select(func.count(Follow.id)).where(Follow.follower_id == user_id))
         or 0
     )
-    return UserProfileResponse(
-        id=user.id,
-        username=user.username,
-        email=user.email,
-        display_name=user.display_name,
-        bio=user.bio,
-        is_active=user.is_active,
-        created_at=user.created_at,
-        posts_count=posts_count,
-        followers_count=followers_count,
-        following_count=following_count,
+    payload: dict[str, object] = {
+        "id": user.id,
+        "username": user.username,
+        "display_name": user.display_name,
+        "bio": user.bio,
+        "is_active": user.is_active,
+        "created_at": user.created_at,
+        "posts_count": posts_count,
+        "followers_count": followers_count,
+        "following_count": following_count,
+    }
+    if include_email:
+        payload["email"] = user.email
+    return schema_cls.model_validate(payload)
+
+
+def get_user_profile(db: Session, user_id: int) -> UserProfileResponse:
+    """Retrieve a user's public profile with posts, followers, and following counts."""
+    return _to_profile_response(db, user_id, UserProfileResponse)
+
+
+def get_my_profile(db: Session, user_id: int) -> UserProfilePrivateResponse:
+    """Retrieve the authenticated user's profile with email and activity counts."""
+    return _to_profile_response(
+        db, user_id, UserProfilePrivateResponse, include_email=True
     )
 
 

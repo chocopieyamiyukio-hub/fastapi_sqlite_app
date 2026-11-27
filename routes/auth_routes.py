@@ -8,14 +8,14 @@ from config.database import get_db
 from config.security import get_current_user
 from controllers import auth_controller
 from models.db_models import User
-from models.schemas import TokenResponse, UserRegister, UserResponse
+from models.schemas import TokenResponse, UserRegister, UserPrivateResponse
 
 router = APIRouter(prefix="/auth", tags=["Auth"])
 
 
 @router.post(
     "/register",
-    response_model=UserResponse,
+    response_model=UserPrivateResponse,
     status_code=status.HTTP_201_CREATED,
 )
 def register(
@@ -39,7 +39,7 @@ def login(
     )
 
 
-@router.get("/me", response_model=UserResponse)
+@router.get("/me", response_model=UserPrivateResponse)
 def read_auth_me(
     current_user: Annotated[User, Depends(get_current_user)],
 ) -> User:

@@ -12,14 +12,16 @@ from models.schemas import (
     PostResponse,
     UserBase,
     UserProfileResponse,
-    UserResponse,
+    UserPublicResponse,
+    UserPrivateResponse,
+    UserProfilePrivateResponse,
     UserUpdate,
 )
 
 router = APIRouter(prefix="/users", tags=["Users"])
 
 
-@router.get("/", response_model=list[UserResponse])
+@router.get("/", response_model=list[UserPublicResponse])
 def read_users(
     skip: int = Query(default=0, ge=0),
     limit: int = Query(default=100, ge=1, le=100),
@@ -29,13 +31,13 @@ def read_users(
     return user_controller.get_users(db=db, skip=skip, limit=limit)
 
 
-@router.get("/me", response_model=UserProfileResponse)
+@router.get("/me", response_model=UserProfilePrivateResponse)
 def read_my_profile(
     current_user: Annotated[User, Depends(get_current_user)],
     db: Session = Depends(get_db),
-) -> UserProfileResponse:
+) -> UserProfilePrivateResponse:
     """Get the authenticated user's profile with activity counts."""
-    return user_controller.get_user_profile(db=db, user_id=current_user.id)
+    return user_controller.get_my_profile(db=db, user_id=current_user.id)
 
 
 @router.get("/me/feed", response_model=list[PostResponse])
@@ -51,7 +53,7 @@ def read_my_feed(
     )
 
 
-@router.get("/{user_id}", response_model=UserResponse)
+@router.get("/{user_id}", response_model=UserPublicResponse)
 def read_user(
     user_id: int = Path(..., ge=1),
     db: Session = Depends(get_db),
@@ -69,7 +71,7 @@ def read_user_profile(
     return user_controller.get_user_profile(db=db, user_id=user_id)
 
 
-@router.patch("/{user_id}", response_model=UserResponse)
+@router.patch("/{user_id}", response_model=UserPrivateResponse)
 def patch_user(
     user_data: UserUpdate,
     current_user: Annotated[User, Depends(get_current_user)],
@@ -86,7 +88,7 @@ def patch_user(
     )
 
 
-@router.put("/{user_id}", response_model=UserResponse)
+@router.put("/{user_id}", response_model=UserPrivateResponse)
 def replace_user(
     user_data: UserBase,
     current_user: Annotated[User, Depends(get_current_user)],
@@ -139,7 +141,7 @@ def unfollow_user(
     )
 
 
-@router.get("/{user_id}/followers", response_model=list[UserResponse])
+@router.get("/{user_id}/followers", response_model=list[UserPublicResponse])
 def read_followers(
     user_id: int = Path(..., ge=1),
     skip: int = Query(default=0, ge=0),
@@ -150,7 +152,7 @@ def read_followers(
     return user_controller.get_followers(db=db, user_id=user_id, skip=skip, limit=limit)
 
 
-@router.get("/{user_id}/following", response_model=list[UserResponse])
+@router.get("/{user_id}/following", response_model=list[UserPublicResponse])
 def read_following(
     user_id: int = Path(..., ge=1),
     skip: int = Query(default=0, ge=0),

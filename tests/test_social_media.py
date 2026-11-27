@@ -64,6 +64,7 @@ class SocialMediaApiTestCase(unittest.TestCase):
         )
         self.assertEqual(reg_resp.status_code, 201, reg_resp.text)
         user = reg_resp.json()
+        self.assertEqual(user["email"], email)
         self.assertNotIn("hashed_password", user)
         self.assertNotIn("password", user)
 
@@ -99,10 +100,31 @@ class SocialMediaApiTestCase(unittest.TestCase):
         # Unauthenticated /auth/me -> 401
         self.assertEqual(self.client.get("/auth/me").status_code, 401)
 
-        # Authenticated /auth/me & /users/me
+        # Authenticated /auth/me & /users/me include private email
         me_resp = self.client.get("/auth/me", headers=alice_headers)
         self.assertEqual(me_resp.status_code, 200)
         self.assertEqual(me_resp.json()["id"], alice["id"])
+        self.assertEqual(me_resp.json()["email"], "alice@example.com")
+
+        my_profile_resp = self.client.get("/users/me", headers=alice_headers)
+        self.assertEqual(my_profile_resp.status_code, 200)
+        self.assertEqual(my_profile_resp.json()["email"], "alice@example.com")
+        self.assertEqual(my_profile_resp.json()["posts_count"], 0)
+
+        # Public user endpoints exclude email
+        users_list_resp = self.client.get("/users/")
+        self.assertEqual(users_list_resp.status_code, 200)
+        self.assertEqual(len(users_list_resp.json()), 2)
+        for public_user in users_list_resp.json():
+            self.assertNotIn("email", public_user)
+
+        public_user_resp = self.client.get(f"/users/{alice['id']}")
+        self.assertEqual(public_user_resp.status_code, 200)
+        self.assertNotIn("email", public_user_resp.json())
+
+        public_profile_resp = self.client.get(f"/users/{alice['id']}/profile")
+        self.assertEqual(public_profile_resp.status_code, 200)
+        self.assertNotIn("email", public_profile_resp.json())
 
         # Duplicate registration -> 409
         dup_resp = self.client.post(
@@ -115,7 +137,7 @@ class SocialMediaApiTestCase(unittest.TestCase):
         )
         self.assertEqual(dup_resp.status_code, 409)
 
-        # Alice updates her own bio -> 200
+        # Alice updates her own bio -> 200 (private response includes email)
         patch_resp = self.client.patch(
             f"/users/{alice['id']}",
             json={"bio": "Hello world!"},
@@ -123,6 +145,22 @@ class SocialMediaApiTestCase(unittest.TestCase):
         )
         self.assertEqual(patch_resp.status_code, 200)
         self.assertEqual(patch_resp.json()["bio"], "Hello world!")
+        self.assertEqual(patch_resp.json()["email"], "alice@example.com")
+
+        # Alice replaces her own profile via PUT -> 200 (private response includes email)
+        put_resp = self.client.put(
+            f"/users/{alice['id']}",
+            json={
+                "username": "alice",
+                "email": "alice@example.com",
+                "display_name": "Alice Updated",
+                "bio": "Updated bio",
+            },
+            headers=alice_headers,
+        )
+        self.assertEqual(put_resp.status_code, 200)
+        self.assertEqual(put_resp.json()["display_name"], "Alice Updated")
+        self.assertEqual(put_resp.json()["email"], "alice@example.com")
 
         # Bob cannot edit or delete Alice -> 403
         forbid_patch = self.client.patch(
@@ -198,6 +236,13 @@ class SocialMediaApiTestCase(unittest.TestCase):
         self.assertTrue(like_resp.json()["liked"])
         self.assertEqual(like_resp.json()["likes_count"], 1)
 
+        # Public post likes list excludes email
+        likes_list_resp = self.client.get(f"/posts/{post['id']}/likes")
+        self.assertEqual(likes_list_resp.status_code, 200)
+        self.assertEqual(len(likes_list_resp.json()), 1)
+        self.assertEqual(likes_list_resp.json()[0]["username"], "bob")
+        self.assertNotIn("email", likes_list_resp.json()[0])
+
         # Duplicate like -> 409
         self.assertEqual(
             self.client.post(f"/posts/{post['id']}/like", headers=bob_headers).status_code,
@@ -272,6 +317,19 @@ class SocialMediaApiTestCase(unittest.TestCase):
         self.assertEqual(follow_resp.status_code, 200)
         self.assertTrue(follow_resp.json()["following"])
         self.assertEqual(follow_resp.json()["followers_count"], 1)
+
+        # Public followers/following lists exclude email
+        followers_resp = self.client.get(f"/users/{bob['id']}/followers")
+        self.assertEqual(followers_resp.status_code, 200)
+        self.assertEqual(len(followers_resp.json()), 1)
+        self.assertEqual(followers_resp.json()[0]["username"], "alice")
+        self.assertNotIn("email", followers_resp.json()[0])
+
+        following_resp = self.client.get(f"/users/{alice['id']}/following")
+        self.assertEqual(following_resp.status_code, 200)
+        self.assertEqual(len(following_resp.json()), 1)
+        self.assertEqual(following_resp.json()[0]["username"], "bob")
+        self.assertNotIn("email", following_resp.json()[0])
 
         # Posts by Alice, Bob, and Carol
         self.client.post("/posts/", json={"content": "Alice post"}, headers=alice_headers)
